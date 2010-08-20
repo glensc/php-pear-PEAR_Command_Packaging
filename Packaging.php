@@ -121,7 +121,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * $commands array above and in Packaging.xml so that it is consistent.
      */
     var $_rpm_pkgname_format = array(
-        'pkg'  => '%C::%s',
+        'pkg'  => 'php-pear-%s',
         'chan' => 'php-channel-%c',
     );
     
@@ -142,7 +142,8 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
     var $_rpm_depname_format = array(
         'pkg'  => '%P',
         'ext'  => 'php-%l',
-        'php'  => 'php',
+        'pecl-ext'  => 'php-pecl-%l',
+        'php'  => 'php-common',
         'chan' => 'php-channel(%n)',
     );
     
@@ -159,7 +160,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * chan - used when generating a spec file for a channel
      */
     var $_rpm_specname_format = array(
-        'pkg'  => '%P-%v.spec',
+        'pkg'  => '%P.spec',
         'chan' => 'php-channel-%c.spec'
     );
     
@@ -182,11 +183,11 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * need to be listed here
      */
     var $_file_prefixes = array(
-        'php' => '%{_libdir}/php/pear',
+        'php' => '%{php_pear_dir}',
         'doc' => '',
-        'ext' => '%{_libdir}/php',
-        'test' => '%{_libdir}/php/tests/%s',
-        'data' => '%{_libdir}/php/data/%s',
+        'ext' => '%{%php_extensiondir}',
+        'test' => '%{php_pear_dir}/tests/%s',
+        'data' => '%{php_pear_dir}/data/%s',
         'script' => '%{_bindir}',
         'cfg' => '%{_sysconfdir}/pear',
         'www' => '%{_datadir}/pear/www'
@@ -197,7 +198,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * printf format. The first '%s' is the RPM header name followed by a colon,
      * the second is the header value.
      */
-    var $_spec_line_format = '%s %s';
+    var $_spec_line_format = "%s\t%s";
     
     // ------------------------------------------------------------------------
     // --- END DISTRIBUTION CONFIG
@@ -247,6 +248,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         'test_dir' => '',
         'test_files_statement' => '',// empty string, or list of test files
         'www_files_statement' => '', // empty string, or newline-separated list of files with "www" role
+        '_noautoreq' => '', // no autoreqdep. PLD Linux specific
     );
     
     // The name of the template spec file to use
@@ -335,10 +337,14 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         if (isset($options['rpm-release'])) {
             $this->_output['release'] = $options['rpm-release'];
         }
+
+        // PLD Linux specific. need source md5
+        $this->_output['tarball'] = $source_file;
+        $this->_output['tarball_md5'] = md5(file_get_contents($source_file));
         
         // Set the PEAR RPM name for the PEAR core package
         $this->_output['pear_rpm_name'] = $this->_getRPMName('PEAR', 'pear.php.net', null, 'pkgdep');
-        
+
         // If source file ends in ".xml" we assume we are creating an RPM spec
         // for a channel rather than an actual package
         if (substr(strtolower($source_file), -4) == '.xml') {
@@ -378,13 +384,40 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
     /**
      * Format an RPM header line to be added to the spec file
      * @param  string $header The name of the RPM header to be added 
-     * @param  string $value  The contents of the RPM header
+     * @param  mixed $value  The contents of the RPM header
      * @return string
      */
-    function _formatRpmHeader($header, $value)
+    function _formatRpmHeader($header, $values)
     {
-        return sprintf($this->_spec_line_format, $header . ':', $value);
+        // PLD Linux: we want values sorted and each on their line
+        $values = (array )$values;
+        sort($values);
+        $ret = '';
+        foreach ($values as $value) {
+            $ret .= sprintf($this->_spec_line_format, $header . ':', $value) . "\n";
+        }
+        return $ret;
     }
+
+
+    /*
+     * Get an version for RPM package.
+     *
+     * @param  string $version         Package version (e.g. '1.2.3RC1')
+     * @return string Normalized version
+     */
+    function _formatRpmVersion($version)
+    {
+
+        // In PLD Linux alpha, beta, rc versions are noted in Release: not Version: tag.
+        preg_match('/^(?P<version>[0-9.]+)(?P<extraversion>.*)$/', $version, $m);
+        if ($m['extraversion']) {
+            $version = "{$m['version']}-0.{$m['extraversion']}";
+        }
+
+        return $version;
+    }
+
     
     /**
      * Replace a macro in the output spec file
@@ -457,7 +490,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         
         $rpmdep = $this->_getRPMName(null, $cf->getName(), $cf->getAlias(), 'chandep');
         if (!empty($rpmdep) && $rpmdep != $this->_output['rpm_package']) {
-            $this->_output['extra_headers'] = $this->_formatRpmHeader('Provides', "$rpmdep") . "\n";
+            $this->_output['extra_headers'] = $this->_formatRpmHeader('Provides', $rpmdep) . "\n";
         }
             
         // Channels don't really have version numbers; this will need to be
@@ -564,7 +597,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         
         // Set up some of the basic macros
         $this->_output['rpm_package'] = $this->_getRPMName($pf->getPackage(), $pf->getChannel(), null, 'pkg');
-        $this->_output['description'] = wordwrap($package_info['description']);
+        $this->_output['description'] = wordwrap($package_info['description'], 70);
         $this->_output['summary'] = trim($package_info['summary']);
         $this->_output['possible_channel'] = $pf->getChannel();
         $this->_output['channel_alias'] = $this->_getChannelAlias($pf->getPackage(), $pf->getChannel());
@@ -646,11 +679,13 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
             if (substr($this->_file_prefixes[$role], -2) == '%s') {
                 $this->_output[$macro_name] = str_replace('%s', $pf->getPackage(), $this->_file_prefixes[$role]);
             } else {
+                $attr = '';
                 if ($role == 'cfg') {
-                    $this->_output[$macro_name] = '%config(noreplace) ' . implode("\n%config(noreplace) ", $files);
-                } else {
-                    $this->_output[$macro_name] = implode("\n", $files);
+                    $attr = '%config(noreplace) %verify(not md5 mtime size) ';
+                } elseif ($role == 'script') {
+                    $attr = '%attr(755,root,root) ';
                 }
+                $this->_output[$macro_name] = $attr . implode("\n$attr", $files);
             }
         }
         $this->_output['files'] = trim($this->_output['files']);
@@ -685,12 +720,10 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
 
     function _generatePackageDeps($pf)
     {
-        $requires = $conflicts = array();
+        $buildrequires = $requires = $conflicts = $suggests = array();
         if ($pf->getPackagexmlVersion() == '1.0') {
             foreach ($pf->getDeps() as $dep) {
-                if (isset($dep['optional']) && $dep['optional'] == 'yes') {
-                    continue;
-                }
+                $optional = isset($dep['optional']) && $dep['optional'] == 'yes';
                 
                 if (!isset($dep['type']) || $dep['type'] == 'pkg') {
                     $type = 'pkgdep';
@@ -725,20 +758,24 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                 if ($dep['rel'] == 'has') {
                     // We use $package as the index to the $requires array to de-duplicate deps.
                     // Note that in the case of duplicate deps, versioned deps will "win" - see several lines down.
-                    $requires[$package] = $package;
+                    if ($optional) {
+                        $suggests[$package] = $package;
+                    } else {
+                        $requires[$package] = $package;
+                    }
                 } elseif ($dep['rel'] == 'not') {
                     $conflicts[] = $package;
                 } elseif ($dep['rel'] == 'ne') {
-                    $conflicts[] = $package . ' = ' . $dep['version'];
+                    $version = $this->_formatRpmVersion($dep['version']);
+                    $conflicts[] = $package . ' = ' . $version;
                 } elseif (isset($trans[$dep['rel']])) {
-                    $requires[$package] = $package . ' ' . $trans[$dep['rel']] . ' ' . $dep['version'];
+                    $version = $this->_formatRpmVersion($dep['version']);
+                    if ($optional) {
+                        $suggests[$package] = $package . ' ' . $trans[$dep['rel']] . ' ' . $version;
+                    } else {
+                        $requires[$package] = $package . ' ' . $trans[$dep['rel']] . ' ' . $version;
+                    }
                 }
-            }
-            if (count($requires)) {
-                $this->_output['extra_headers'] .= $this->_formatRpmHeader('Requires', implode(', ', $requires)) . "\n";
-            }
-            if (count($conflicts)) {
-                $this->_output['extra_headers'] .= $this->_formatRpmHeader('Conflicts', implode(', ', $conflicts)) . "\n";
             }
         } else {
             $this->_output['package2xml'] = '2'; // tell the spec to use package2.xml
@@ -842,10 +879,10 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                         }
                     } else {
                         if (isset($dep['min'])) {
-                            $requires[$package] = $package . ' >= ' . $dep['min'];
+                            $requires[$package] = $package . ' >= ' . $this->_formatRpmVersion($dep['min']);
                         }
                         if (isset($dep['max'])) {
-                            $requires[$package] = $package . ' <= ' . $dep['max'];
+                            $requires[$package] = $package . ' <= ' . $this->_formatRpmVersion($dep['max']);
                         }
                         if (isset($dep['exclude'])) {
                             $ex = $dep['exclude'];
@@ -864,18 +901,109 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                 $a = $tar->extractInString('package2.xml');
                 $tar->popErrorHandling();
                 if ($a === null || PEAR::isError($a)) {
-                    $this->_output['package2xml'] = '';
                     // this doesn't have a package.xml version 1.0
-                    $requires[$this->_output['pear_rpm_name']] = $this->_output['pear_rpm_name'] . ' >= ' .
-                        $deps['required']['pearinstaller']['min'];
-                }
-                if (count($requires)) {
-                    $this->_output['extra_headers'] .= $this->_formatRpmHeader('Requires', implode(', ', $requires)) . "\n";
-                }
-                if (count($conflicts)) {
-                    $this->_output['extra_headers'] .= $this->_formatRpmHeader('Conflicts', implode(', ', $conflicts)) . "\n";
+                    $this->_output['package2xml'] = '';
+                    $version = $this->_formatRpmVersion($deps['required']['pearinstaller']['min']);
+                    // PLD linux hack: include epoch for PEAR package
+                    $version = "1:{$version}";
+                    $buildrequires[$this->_output['pear_rpm_name']] = $this->_output['pear_rpm_name'] . ' >= ' . $version;
                 }
             }
+
+            if (isset($deps['required']['extension'])) {
+                if (!isset($deps['required']['extension'][0])) {
+                    $deps['required']['extension'] = array($deps['required']['extension']);
+                }
+                foreach ((array )$deps['required']['extension'] as $dep) {
+                    if (!isset($dep['channel'])) $dep['channel'] = null;
+                    // $package contains the *dependency name* here, which may or may
+                    // not be the same as the package name
+                    $package = $this->_getRPMName($dep['name'], $dep['channel'], null, 'ext');
+
+                    if (empty($package)) {
+                        continue;
+                    }
+
+                    $requires[$package] = $package;
+                }
+            }
+
+            if (isset($deps['required']['subpackage'])) {
+                if (!isset($deps['required']['subpackage'][0])) {
+                    $deps['required']['subpackage'] = array($deps['required']['subpackage']);
+                }
+                foreach ($deps['required']['subpackage'] as $dep) {
+                    if (!isset($dep['channel'])) $dep['channel'] = null;
+
+                    // $package contains the *dependency name* here, which may or may
+                    // not be the same as the package name
+                    $package = $this->_getRPMName($dep['name'], $dep['channel'], null, 'pkgdep');
+
+                    if (empty($package)) {
+                        continue;
+                    }
+
+                    $requires[$package] = $package;
+                    // XXX: should be more complese like above with ranges, etc
+                }
+            }
+
+            if (isset($deps['optional']['package'])) {
+                if (!isset($deps['optional']['package'][0])) {
+                    $deps['optional']['package'] = array($deps['optional']['package']);
+                }
+                foreach ($deps['optional']['package'] as $dep) {
+                    if (!isset($dep['channel'])) $dep['channel'] = null;
+
+                    // $package contains the *dependency name* here, which may or may
+                    // not be the same as the package name
+                    $package = $this->_getRPMName($dep['name'], $dep['channel'], null, 'pkgdep');
+
+                    if (empty($package)) {
+                        continue;
+                    }
+
+                    // suggests are not versioned (makes no sense in poldek)
+                    $suggests[$package] = $package;
+
+                    // fill extra info for _noautoreq deps
+                    $this->_output['_noautoreq'] .= " pear(". str_replace('_', '/', $dep['name']) . ".*)";
+                }
+            }
+
+            if (isset($deps['optional']['extension'])) {
+                if (!isset($deps['optional']['extension'][0])) {
+                    $deps['optional']['extension'] = array($deps['optional']['extension']);
+                }
+                foreach ($deps['optional']['extension'] as $dep) {
+                    if (!isset($dep['channel'])) $dep['channel'] = null;
+
+                    // $package contains the *dependency name* here, which may or may
+                    // not be the same as the package name
+                    $package = $this->_getRPMName($dep['name'], $dep['channel'], null, 'ext');
+
+                    if (empty($package)) {
+                        continue;
+                    }
+
+                    // suggests are not versioned (makes no sense in poldek)
+                    $suggests[$package] = $package;
+                }
+            }
+        }
+
+        // append extra headers which we collected
+        if (count($buildrequires)) {
+            $this->_output['extra_headers'] .= $this->_formatRpmHeader('BuildRequires', $buildrequires) . "\n";
+        }
+        if (count($requires)) {
+            $this->_output['extra_headers'] .= $this->_formatRpmHeader('Requires', $requires) . "\n";
+        }
+        if (count($conflicts)) {
+            $this->_output['extra_headers'] .= $this->_formatRpmHeader('Conflicts', $conflicts) . "\n";
+        }
+        if (count($suggests)) {
+            $this->_output['extra_headers'] .= $this->_formatRpmHeader('Suggests', $suggests) . "\n";
         }
     }
 
@@ -927,7 +1055,12 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
             case 'pkg':
                 return $this->_getRPMNameFromFormat($this->_rpm_pkgname_format['pkg'], $package_name, $chan_name, $chan_alias);
             case 'pkgdep':
-                $type = 'pkg';
+                // PLD Linux: pecl extensions have different naming format
+                if ($chan_alias == 'PECL') {
+                    $type = 'pecl-ext';
+                } else {
+                    $type = 'pkg';
+                }
                 // let it drop through...
             default:
                 if (isset($this->_rpm_depname_format[$type]) && !empty($this->_rpm_depname_format[$type])) {

@@ -54,6 +54,11 @@ class PEAR_Command_Packaging extends PEAR_Command_Common
                     'arg' => 'FILE',
                     'doc' => 'Use FILE as RPM spec file template'
                     ),
+                'output' => array(
+                    'shortopt' => 'o',
+                    'arg' => 'FILE',
+                    'doc' => 'Use FILE as output filename'
+                    ),
                 'rpm-release' => array(
                     'shortopt' => 'r',
                     'arg' => 'RELEASE',
@@ -332,10 +337,15 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         
         // Initialise the RPM package/dep naming format options
         $this->_initialiseNamingOptions($options);        
-        
+
         // Set the RPM release version
         if (isset($options['rpm-release'])) {
             $this->_output['release'] = $options['rpm-release'];
+        }
+
+        // Pass output file in options
+        if (isset($options['output'])) {
+            $this->_output['output-file'] = $options['output'];
         }
 
         // PLD Linux specific. need source md5
@@ -443,16 +453,20 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         } else {
             $package_name = null;
         }
-        
+
         // Work out the name of the output spec file
-        $spec_file = $this->_getRPMNameFromFormat(
-            $this->_rpm_specname_format[$type],
-            $package_name,
-            $this->_output['possible_channel'],
-            $this->_output['channel_alias'],
-            $this->_output['version']
-        );
-        
+        if (isset($this->_output['output-file'])) {
+            $spec_file = $this->_output['output-file'];
+        } else {
+            $spec_file = $this->_getRPMNameFromFormat(
+                $this->_rpm_specname_format[$type],
+                $package_name,
+                $this->_output['possible_channel'],
+                $this->_output['channel_alias'],
+                $this->_output['version']
+            );
+        }
+
         // Write the actual file
         $wp = fopen($spec_file, 'wb');
         if (!$wp) {

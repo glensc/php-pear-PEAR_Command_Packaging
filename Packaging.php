@@ -736,7 +736,8 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
     {
         $buildrequires = $requires = $conflicts = $suggests = array();
         if ($pf->getPackagexmlVersion() == '1.0') {
-            foreach ($pf->getDeps() as $dep) {
+            $deps = $pf->getDeps();
+            foreach ($deps as $dep) {
                 $optional = isset($dep['optional']) && $dep['optional'] == 'yes';
                 
                 if (!isset($dep['type']) || $dep['type'] == 'pkg') {
@@ -745,8 +746,14 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                     $type = $dep['type'];
                 }
                 
-                if (!isset($dep['channel'])) $dep['channel'] = null;
                 if (!isset($dep['name'])) $dep['name'] = ''; //e.g. "php" dep
+                if (!isset($dep['channel'])) {
+                    // we need to figure out channel as pecl packages are might
+                    // be named differently than pear packages.
+                    $chan_alias = $this->_getChannelAlias($dep['name']);
+                    $reg = &$this->config->getRegistry();
+                    $dep['channel'] = $reg->channelName($chan_alias);
+                }
                 
                 // $package contains the *dependency name* here, which may or may
                 // not be the same as the package name

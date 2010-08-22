@@ -988,7 +988,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                     // suggests are not versioned (makes no sense in poldek)
                     $suggests[$package] = $package;
 
-                    // fill extra info for _noautoreq deps
+                    // PLD Linux: Fill extra info for _noautoreq deps
                     $this->_output['_noautoreq'] .= " pear(". str_replace('_', '/', $dep['name']) . ".*)";
                 }
             }

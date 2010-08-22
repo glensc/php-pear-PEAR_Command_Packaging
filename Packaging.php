@@ -126,10 +126,10 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * $commands array above and in Packaging.xml so that it is consistent.
      */
     var $_rpm_pkgname_format = array(
-        'pkg'  => 'php-pear-%s',
+        'pkg'  => 'php-%s',
         'chan' => 'php-channel-%c',
     );
-    
+
     /**
      * The default format of various dependencies that might be generated in the
      * spec file. The currently-handled dependency types are:
@@ -147,6 +147,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
     var $_rpm_depname_format = array(
         'pkg'  => '%P',
         'ext'  => 'php-%l',
+        'pear-pkg' => 'php-pear-%s',
         'pecl-ext'  => 'php-pecl-%l',
         'php'  => 'php-common',
         'chan' => 'php-channel(%n)',
@@ -1079,6 +1080,8 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                 // PLD Linux: pecl extensions have different naming format
                 if ($chan_alias == 'PECL') {
                     $type = 'pecl-ext';
+                } elseif ($chan_alias == 'PEAR') {
+                    $type = 'pear-pkg';
                 } else {
                     $type = 'pkg';
                 }

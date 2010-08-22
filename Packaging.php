@@ -1087,6 +1087,11 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                 }
                 // let it drop through...
             default:
+                // PLD Linux: sanitize gtk2 ext name.
+                // http://bugs.php.net/bug.php?id=52663
+                if ($type == 'ext' && $package_name == 'php-gtk') {
+                    $package_name = 'gtk2';
+                }
                 if (isset($this->_rpm_depname_format[$type]) && !empty($this->_rpm_depname_format[$type])) {
                     return $this->_getRPMNameFromFormat($this->_rpm_depname_format[$type], $package_name, $chan_name, $chan_alias);
                 }

@@ -126,7 +126,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * $commands array above and in Packaging.xml so that it is consistent.
      */
     var $_rpm_pkgname_format = array(
-        'pkg'  => 'php-%s',
+        'pkg'  => 'php-%c-%s',
         'chan' => 'php-channel-%c',
     );
 
@@ -145,7 +145,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
      * %P   = use the same as whatever rpm_pkgname_format is set to be
      */
     var $_rpm_depname_format = array(
-        'pkg'  => '%P',
+        'pkg'  => 'php-%c-%s',
         'ext'  => 'php-%l',
         'pear-pkg' => 'php-pear-%s',
         'pecl-ext'  => 'php-pecl-%l',

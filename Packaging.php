@@ -704,6 +704,14 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
             }
         }
         $this->_output['files'] = trim($this->_output['files']);
+
+		// figure registry file location
+		if (in_array($this->_output['possible_channel'], $this->_standard_channels)) {
+			$registry_dir = '%s/.registry/*.reg';
+		} else {
+			$registry_dir = '%s/.registry/.channel.*/*.reg';
+		}
+		$this->_output['registry_files_statement'] = str_replace('%s', $this->_file_prefixes['php'], $registry_dir);
         
         // Handle doc files
         if (isset($file_list['doc'])) {

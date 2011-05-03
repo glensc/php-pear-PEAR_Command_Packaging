@@ -198,6 +198,14 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
         'cfg' => '%{_sysconfdir}/pear',
         'www' => '%{_datadir}/pear/www'
     );
+
+    /**
+     * Role packages to use for non-standard file roles. Used when generating
+     * specs for packages only.
+     */
+    var $_role_packages = array(
+        'horde' => 'php-horde-Horde_Role',
+    );
     
     /**
      * The format to use when adding new RPM header lines to the spec file, in
@@ -639,7 +647,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
 
         // Generate the Requires and Conflicts for the RPM
         if ($pf->getDeps()) {
-            $this->_generatePackageDeps($pf);
+            $this->_generatePackageDeps($pf, $package_info['filelist']);
         }
     
         // Hook to support virtual Provides, where the dependency name differs
@@ -741,7 +749,7 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
     }
     
 
-    function _generatePackageDeps($pf)
+    function _generatePackageDeps($pf, $filelist)
     {
         $buildrequires = $requires = $conflicts = $suggests = array();
         if ($pf->getPackagexmlVersion() == '1.0') {
@@ -1019,6 +1027,23 @@ Wrote: /path/to/rpm-build-tree/RPMS/noarch/PEAR::Net_Socket-1.0-1.noarch.rpm
                     // suggests are not versioned (makes no sense in poldek)
                     $suggests[$package] = $package;
                 }
+            }
+        }
+
+        // go over filelist, to see if we need custom Role package presence
+        foreach ($filelist as $filename => $attr) {
+            // Ignore files with no role set or that didn't get installed
+            if (!isset($attr['role']) || !isset($attr['installed_as'])) {
+                continue;
+            }
+            $role = $attr['role'];
+            
+            if (!isset($this->_file_prefixes[$role])) {
+                if (isset($this->_role_packages[$role])) {
+                    $pkg = $this->_role_packages[$role];
+                    $buildrequires[$pkg] = $pkg;
+                }
+                // TODO: else use some rpm virtual provides for role?
             }
         }
 
